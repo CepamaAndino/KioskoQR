@@ -501,18 +501,72 @@ function AbonoModal({ entry, onClose, onConfirm }) {
 function Productos({ products, onSave }) {
   const [nombre, setNombre] = useState("");
   const [precio, setPrecio] = useState("");
+  const [masivo, setMasivo] = useState(false);
+  const [texto, setTexto] = useState("");
+  const [previewErr, setPreviewErr] = useState("");
+
   const agregar = () => { if (!nombre.trim() || !Number(precio)) return; onSave([...products, { name: nombre.trim(), price: Number(precio) }]); setNombre(""); setPrecio(""); };
   const eliminar = (name) => onSave(products.filter((p) => p.name !== name));
   const actualizarPrecio = (name, price) => onSave(products.map((p) => p.name === name ? { ...p, price: Number(price) } : p));
 
+  const parsearMasivo = (raw) => {
+    const lineas = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    const nuevos = [];
+    for (const linea of lineas) {
+      const partes = linea.split(/[,;\t]| {2,}/).map((s) => s.trim()).filter(Boolean);
+      if (partes.length < 2) continue;
+      const precioTxt = partes[partes.length - 1].replace(/[^\d.,-]/g, "").replace(/\./g, "").replace(",", ".");
+      const precioNum = Number(precioTxt);
+      const nombreTxt = partes.slice(0, -1).join(" ").trim();
+      if (nombreTxt && precioNum > 0) nuevos.push({ name: nombreTxt, price: precioNum });
+    }
+    return nuevos;
+  };
+
+  const nuevosDetectados = masivo ? parsearMasivo(texto) : [];
+
+  const cargarMasivo = () => {
+    if (nuevosDetectados.length === 0) { setPreviewErr("No detecté productos válidos. Usa el formato: Nombre, Precio (uno por línea)."); return; }
+    const existentes = new Map(products.map((p) => [p.name.toLowerCase(), p]));
+    nuevosDetectados.forEach((n) => existentes.set(n.name.toLowerCase(), n)); // si ya existe, actualiza el precio
+    onSave(Array.from(existentes.values()));
+    setTexto(""); setMasivo(false); setPreviewErr("");
+  };
+
   return (
-    <div className="sd-card" style={{ padding: 20, maxWidth: 560 }}>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 14, color: "var(--sage-dark)" }}>Mantenedor de productos</div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-        <input className="sd-input" style={{ flex: 2 }} placeholder="Nombre del producto" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-        <input type="number" className="sd-input" style={{ flex: 1 }} placeholder="Precio" value={precio} onChange={(e) => setPrecio(e.target.value)} />
-        <button className="sd-btn sd-btn-primary" onClick={agregar}>Agregar</button>
+    <div className="sd-card" style={{ padding: 20, maxWidth: 620 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "var(--sage-dark)" }}>Mantenedor de productos</div>
+        <button className="sd-btn sd-btn-ghost" style={{ padding: "5px 10px", fontSize: 12.5 }} onClick={() => setMasivo((v) => !v)}>
+          {masivo ? "Agregar uno por uno" : "Cargar varios de una vez"}
+        </button>
       </div>
+
+      {masivo ? (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 8 }}>
+            Pega la lista, un producto por línea. Sirve separado por coma, punto y coma o tabulación (como si lo copiaras de Excel/Sheets): <br />
+            <code style={{ background: "var(--paper)", padding: "1px 5px", borderRadius: 4 }}>Mix frutos secos, 1200</code>
+          </div>
+          <textarea className="sd-input" style={{ width: "100%", minHeight: 140, fontFamily: "monospace", fontSize: 13 }}
+            placeholder={"Mix frutos secos, 1200\nQueque Avena Naranja Chips, 1100\nPan pita chia, linaza con huevo y jamón, 1990"}
+            value={texto} onChange={(e) => { setTexto(e.target.value); setPreviewErr(""); }} />
+          {texto.trim() && (
+            <div style={{ fontSize: 12, color: "var(--ink-soft)", margin: "8px 0" }}>
+              Detecté <b>{nuevosDetectados.length}</b> producto{nuevosDetectados.length !== 1 ? "s" : ""} válido{nuevosDetectados.length !== 1 ? "s" : ""}.
+            </div>
+          )}
+          {previewErr && <div style={{ fontSize: 12, color: "var(--rose)", marginBottom: 8 }}>{previewErr}</div>}
+          <button className="sd-btn sd-btn-primary" onClick={cargarMasivo}>Cargar {nuevosDetectados.length > 0 ? `(${nuevosDetectados.length})` : ""}</button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+          <input className="sd-input" style={{ flex: 2 }} placeholder="Nombre del producto" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          <input type="number" className="sd-input" style={{ flex: 1 }} placeholder="Precio" value={precio} onChange={(e) => setPrecio(e.target.value)} />
+          <button className="sd-btn sd-btn-primary" onClick={agregar}>Agregar</button>
+        </div>
+      )}
+
       {products.length === 0 ? <EmptyState text="Aún no hay productos cargados." /> : (
         <table className="sd-table">
           <thead><tr><th>Producto</th><th>Precio</th><th></th></tr></thead>
