@@ -37,30 +37,57 @@ const todayStr = () => {
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-// ---------- Storage local (para el sitio publicado; en Claude usa window.storage compartido) ----------
-const hasSharedStorage = typeof window.storage !== "undefined";
+// ---------- Sincronización automática con Google Sheets ----------
+// Pega aquí la URL de tu Apps Script Web App para que TODOS los dispositivos
+// se sincronicen solos, sin que cada persona tenga que configurarla.
+const DEFAULT_API_URL = "";
+const POLL_MS = 8000; // cada cuánto revisa si hay cambios de otros dispositivos
 
-async function loadShared(key, fallback) {
+function getApiUrl() {
+  return localStorage.getItem("deudas:apiUrl") || DEFAULT_API_URL;
+}
+function setApiUrl(url) {
+  localStorage.setItem("deudas:apiUrl", url);
+}
+
+// Caché local (para que la app no quede en blanco si se corta internet)
+async function loadLocal(key, fallback) {
   try {
-    if (hasSharedStorage) {
-      const res = await window.storage.get(key, true);
-      return res ? JSON.parse(res.value) : fallback;
-    }
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
   } catch {
     return fallback;
   }
 }
-async function saveShared(key, value) {
+async function saveLocal(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.error(e); }
+}
+
+async function fetchFromSheet() {
+  const url = getApiUrl();
+  if (!url) return null;
   try {
-    if (hasSharedStorage) {
-      await window.storage.set(key, JSON.stringify(value), true);
-    } else {
-      localStorage.setItem(key, JSON.stringify(value));
-    }
+    const res = await fetch(url, { method: "GET" });
+    const data = await res.json();
+    return data; // { entries, products }
   } catch (e) {
-    console.error("storage error", e);
+    console.error("sync fetch error", e);
+    return null;
+  }
+}
+
+async function pushToSheet(payload) {
+  const url = getApiUrl();
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.error("sync push error", e);
   }
 }
 
@@ -80,25 +107,49 @@ function App() {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [toast, setToast] = useState(null);
 
+  const [apiUrl, setApiUrlState] = useState(getApiUrl());
+  const [syncState, setSyncState] = useState(apiUrl ? "conectando" : "sin-configurar");
+
+  const refrescarDesdeSheet = useCallback(async (silencioso) => {
+    if (!getApiUrl()) return;
+    const data = await fetchFromSheet();
+    if (data) {
+      setEntries(data.entries || []);
+      setProducts(data.products || []);
+      saveLocal("deudas:entries", data.entries || []);
+      saveLocal("deudas:products", data.products || []);
+      setSyncState("conectado");
+    } else if (!silencioso) {
+      setSyncState("error");
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
-      const [e, p] = await Promise.all([
-        loadShared("deudas:entries", []),
-        loadShared("deudas:products", []),
-      ]);
-      setEntries(e);
-      setProducts(p);
+      const [eLocal, pLocal] = await Promise.all([loadLocal("deudas:entries", []), loadLocal("deudas:products", [])]);
+      setEntries(eLocal);
+      setProducts(pLocal);
       setLoading(false);
+      if (getApiUrl()) await refrescarDesdeSheet(false);
     })();
   }, []);
 
+  // Sincronización automática: revisa cada POLL_MS si hay cambios de otros dispositivos
+  useEffect(() => {
+    if (!apiUrl) return;
+    const id = setInterval(() => refrescarDesdeSheet(true), POLL_MS);
+    return () => clearInterval(id);
+  }, [apiUrl, refrescarDesdeSheet]);
+
   const persistEntries = useCallback(async (next) => {
     setEntries(next);
-    await saveShared("deudas:entries", next);
+    await saveLocal("deudas:entries", next);
+    pushToSheet({ entries: next });
   }, []);
   const persistProducts = useCallback(async (next) => {
     setProducts(next);
-    await saveShared("deudas:products", next);
+    await saveLocal("deudas:products", next);
+    pushToSheet({ products: next });
   }, []);
 
   const showToast = (msg) => {
@@ -163,7 +214,10 @@ function App() {
       {tab === "productos" && (
         <Productos products={products} onSave={(next) => { persistProducts(next); showToast("Productos actualizados ✓"); }} />
       )}
-      {tab === "sync" && <Sync entries={entries} products={products} />}
+      {tab === "sync" && (
+        <Sync entries={entries} products={products}
+          onConfigured={(url) => { setApiUrlState(url); refrescarDesdeSheet(false); }} />
+      )}
     </Shell>
   );
 }
@@ -477,9 +531,10 @@ function Productos({ products, onSave }) {
   );
 }
 
-function Sync({ entries, products }) {
-  const [webhook, setWebhook] = useState("");
+function Sync({ entries, products, onConfigured }) {
+  const [url, setUrl] = useState(getApiUrl());
   const [estado, setEstado] = useState("");
+  const conectado = !!getApiUrl();
 
   const csv = useMemo(() => {
     const header = ["Fecha","Nombre","Curso / Rol","Producto","Cantidad","Valor","Total compra","Abono","Saldo movimiento","Estado","Observación"];
@@ -489,57 +544,100 @@ function Sync({ entries, products }) {
 
   const descargar = () => {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
+    const dlUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "RegistroDeudas.csv"; a.click();
-    URL.revokeObjectURL(url);
+    a.href = dlUrl; a.download = "RegistroDeudas.csv"; a.click();
+    URL.revokeObjectURL(dlUrl);
   };
 
-  const enviarASheet = async () => {
-    if (!webhook) return;
-    setEstado("Enviando…");
-    try {
-      await fetch(webhook, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) });
-      setEstado("Enviado ✓ (revisa la hoja para confirmar)");
-    } catch (e) {
-      setEstado("No se pudo enviar — revisa la URL");
+  const probarYGuardar = async () => {
+    if (!url.trim()) return;
+    setEstado("Probando conexión…");
+    setApiUrl(url.trim());
+    const data = await fetchFromSheet();
+    if (data) {
+      setEstado("Conectado ✓ — desde ahora sincroniza solo, automáticamente.");
+      onConfigured && onConfigured(url.trim());
+    } else {
+      setEstado("No se pudo conectar — revisa que la URL termine en /exec y que el acceso esté en \"Cualquier usuario\".");
     }
   };
 
-  const appsScript = `function doPost(e) {
+  const appsScript = `function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  return ContentService.createTextOutput(JSON.stringify({
+    entries: leerHoja(ss, "RegistroDeudas"),
+    products: leerProductos(ss, "Productos")
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
   const data = JSON.parse(e.postData.contents);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RegistroDeudas");
-  sheet.getRange(2, 1, sheet.getMaxRows() - 1, 11).clearContent();
-  const rows = data.entries.map(r => [r.fecha, r.nombre, r.curso, r.producto, r.cantidad, r.valor, r.totalCompra, r.abono, r.saldo, r.estado, r.observacion || ""]);
-  if (rows.length) sheet.getRange(2, 1, rows.length, 11).setValues(rows);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (data.entries) escribirHoja(ss, "RegistroDeudas",
+    ["Fecha","Nombre","Curso / Rol","Producto","Cantidad","Valor","Total compra","Abono","Saldo movimiento","Estado","Observación","ID"],
+    data.entries.map(r => [r.fecha, r.nombre, r.curso, r.producto, r.cantidad, r.valor, r.totalCompra, r.abono, r.saldo, r.estado, r.observacion || "", r.id]));
+  if (data.products) escribirHoja(ss, "Productos", ["Nombre","Precio"], data.products.map(p => [p.name, p.price]));
   return ContentService.createTextOutput("ok");
+}
+
+function hoja(ss, nombre, header) {
+  let sh = ss.getSheetByName(nombre);
+  if (!sh) { sh = ss.insertSheet(nombre); sh.getRange(1,1,1,header.length).setValues([header]); }
+  return sh;
+}
+function escribirHoja(ss, nombre, header, filas) {
+  const sh = hoja(ss, nombre, header);
+  const max = Math.max(sh.getMaxRows() - 1, filas.length, 1);
+  sh.getRange(2,1,max,header.length).clearContent();
+  if (filas.length) sh.getRange(2,1,filas.length,header.length).setValues(filas);
+}
+function leerHoja(ss, nombre) {
+  const sh = ss.getSheetByName(nombre);
+  if (!sh) return [];
+  const filas = sh.getDataRange().getValues().slice(1).filter(r => r.some(c => c !== ""));
+  return filas.map(r => ({ fecha:r[0], nombre:r[1], curso:r[2], producto:r[3], cantidad:r[4], valor:r[5], totalCompra:r[6], abono:r[7], saldo:r[8], estado:r[9], observacion:r[10], id: r[11] || (r[0]+""+r[1]+""+Math.random()) }));
+}
+function leerProductos(ss, nombre) {
+  const sh = ss.getSheetByName(nombre);
+  if (!sh) return [];
+  const filas = sh.getDataRange().getValues().slice(1).filter(r => r.some(c => c !== ""));
+  return filas.map(r => ({ name: r[0], price: r[1] }));
 }`;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div className="sd-card" style={{ padding: 20 }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>Exportar</div>
-        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 14 }}>Descarga el registro completo en formato compatible con tu planilla de Google Sheets (mismas columnas).</div>
-        <button className="sd-btn sd-btn-primary" onClick={descargar}>Descargar CSV</button>
+      <div className="sd-card" style={{ padding: 20, borderLeft: `4px solid ${conectado ? "var(--sage)" : "var(--ochre)"}` }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>
+          {conectado ? "Sincronización activa ✓" : "Conectar con Google Sheets"}
+        </div>
+        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 12, lineHeight: 1.5 }}>
+          {conectado
+            ? "Cada registro, abono o producto que se guarde acá se envía solo a tu Google Sheet, y cada " + (POLL_MS/1000) + " segundos revisa si hay cambios hechos desde otro dispositivo. No necesitas hacer nada más."
+            : "Para que la app se sincronice sola entre todos los dispositivos, conéctala una vez a tu Google Sheet con un puente gratuito (Apps Script):"}
+        </div>
+        {!conectado && (
+          <ol style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.8, paddingLeft: 18, marginBottom: 14 }}>
+            <li>Abre tu Google Sheet → Extensiones → Apps Script.</li>
+            <li>Borra el contenido y pega el código de abajo → Guardar.</li>
+            <li>Implementar → Nueva implementación → tipo "Aplicación web" → Ejecutar como "Yo" → acceso "Cualquier usuario" → Implementar.</li>
+            <li>Copia la URL que termina en <code>/exec</code> y pégala abajo.</li>
+          </ol>
+        )}
+        {!conectado && (
+          <pre style={{ background: "var(--paper)", padding: 12, borderRadius: 8, fontSize: 11.5, overflowX: "auto", marginBottom: 14 }}>{appsScript}</pre>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <input className="sd-input" style={{ flex: 1 }} placeholder="Pega aquí la URL que termina en /exec" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <button className="sd-btn sd-btn-primary" onClick={probarYGuardar}>{conectado ? "Actualizar URL" : "Conectar"}</button>
+        </div>
+        {estado && <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 8 }}>{estado}</div>}
       </div>
 
       <div className="sd-card" style={{ padding: 20 }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>Escribir directo en tu Google Sheet</div>
-        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 12, lineHeight: 1.5 }}>
-          Esta app no puede iniciar sesión en tu cuenta de Google sola. La forma de que escriba <b>directo</b> en tu hoja es con un pequeño puente gratuito de Google (Apps Script). Se hace una sola vez:
-        </div>
-        <ol style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.8, paddingLeft: 18, marginBottom: 14 }}>
-          <li>Abre tu hoja <i>RegistroDeudas</i> → Extensiones → Apps Script.</li>
-          <li>Borra el contenido y pega el código de abajo → Guardar.</li>
-          <li>Implementar → Nueva implementación → tipo "Aplicación web" → acceso "Cualquier usuario" → Implementar.</li>
-          <li>Copia la URL que te entrega y pégala aquí abajo.</li>
-        </ol>
-        <pre style={{ background: "var(--paper)", padding: 12, borderRadius: 8, fontSize: 11.5, overflowX: "auto", marginBottom: 14 }}>{appsScript}</pre>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input className="sd-input" style={{ flex: 1 }} placeholder="Pega aquí la URL de la aplicación web" value={webhook} onChange={(e) => setWebhook(e.target.value)} />
-          <button className="sd-btn sd-btn-primary" onClick={enviarASheet}>Enviar ahora</button>
-        </div>
-        {estado && <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 8 }}>{estado}</div>}
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>Exportar</div>
+        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 14 }}>Descarga el registro completo en formato compatible con tu planilla (por si lo necesitas aparte).</div>
+        <button className="sd-btn sd-btn-primary" onClick={descargar}>Descargar CSV</button>
       </div>
     </div>
   );
