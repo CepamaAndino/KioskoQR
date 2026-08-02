@@ -40,7 +40,7 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 // ---------- Sincronización automática con Google Sheets ----------
 // Pega aquí la URL de tu Apps Script Web App para que TODOS los dispositivos
 // se sincronicen solos, sin que cada persona tenga que configurarla.
-const DEFAULT_API_URL = "";
+const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzQSaX8JC5s0n4pBOPIiWGODIL2BsD_FwrB4XyrXzxxm_0VX6sh1Q6o6zIGTNl4OmvM/exec";
 const POLL_MS = 8000; // cada cuánto revisa si hay cambios de otros dispositivos
 
 function getApiUrl() {
