@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Semillas · Registro de deudas</title>
+<link rel="icon" href="./assets/logo-semillas.png" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; margin: 0; }
+  body { font-family: 'Inter', sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ---------- Datos base ----------
+const CURSOS = [
+  "Preescolar", "Taller 1", "Taller 2", "5to", "6to", "7mo", "8vo",
+  "1medio", "2medio", "3medio", "4medio", "Secretaría", "Profesor", "Directivo",
+];
+
+const CLP = (n) => "$" + Math.round(n || 0).toLocaleString("es-CL");
+
+const todayStr = () => {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+};
+
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+// ---------- Storage local (para el sitio publicado; en Claude usa window.storage compartido) ----------
+const hasSharedStorage = typeof window.storage !== "undefined";
+
+async function loadShared(key, fallback) {
+  try {
+    if (hasSharedStorage) {
+      const res = await window.storage.get(key, true);
+      return res ? JSON.parse(res.value) : fallback;
+    }
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+async function saveShared(key, value) {
+  try {
+    if (hasSharedStorage) {
+      await window.storage.set(key, JSON.stringify(value), true);
+    } else {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+  } catch (e) {
+    console.error("storage error", e);
+  }
+}
+
+function Logo({ size = 40 }) {
+  return <img src="./assets/logo-semillas.png" alt="Semillas Cafetería Montessori" style={{ height: size, width: "auto", objectFit: "contain" }} />;
+}
+
+function Mascota({ size = 120, style = {} }) {
+  return <img src="./assets/semi-mascota.png" alt="Semi, la mascota de Semillas" style={{ height: size, width: "auto", objectFit: "contain", ...style }} />;
+}
+
+function App() {
+  const [tab, setTab] = useState("resumen");
+  const [entries, setEntries] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const [e, p] = await Promise.all([
+        loadShared("deudas:entries", []),
+        loadShared("deudas:products", []),
+      ]);
+      setEntries(e);
+      setProducts(p);
+      setLoading(false);
+    })();
+  }, []);
+
+  const persistEntries = useCallback(async (next) => {
+    setEntries(next);
+    await saveShared("deudas:entries", next);
+  }, []);
+  const persistProducts = useCallback(async (next) => {
+    setProducts(next);
+    await saveShared("deudas:products", next);
+  }, []);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  };
+
+  const nombresExistentes = useMemo(() => {
+    const set = new Map();
+    entries.forEach((e) => set.set(e.nombre.trim().toLowerCase(), e.nombre));
+    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [entries]);
+
+  const totals = useMemo(() => {
+    const pendientes = entries.filter((e) => e.saldo > 0);
+    const totalPendiente = pendientes.reduce((s, e) => s + e.saldo, 0);
+    const personasSet = new Set(pendientes.map((e) => e.nombre.trim().toLowerCase()));
+    return { totalPendiente, personas: personasSet.size, movimientos: entries.length };
+  }, [entries]);
+
+  const personasResumen = useMemo(() => {
+    const map = new Map();
+    entries.forEach((e) => {
+      const key = e.nombre.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, { nombre: e.nombre, curso: e.curso, saldo: 0, movimientos: 0 });
+      const rec = map.get(key);
+      rec.saldo += e.saldo;
+      rec.movimientos += 1;
+      rec.curso = e.curso || rec.curso;
+    });
+    return Array.from(map.values()).sort((a, b) => b.saldo - a.saldo);
+  }, [entries]);
+
+  if (loading) {
+    return <Shell><div style={{ padding: 40, textAlign: "center", color: "var(--ink-soft)" }}>Cargando registro…</div></Shell>;
+  }
+
+  return (
+    <Shell tab={tab} setTab={setTab} toast={toast}>
+      {tab === "resumen" && (
+        <Resumen totals={totals} personasResumen={personasResumen}
+          onVerPersona={(n) => { setSelectedPerson(n); setTab("personas"); }} />
+      )}
+      {tab === "registrar" && (
+        <RegistrarDeuda products={products} nombresExistentes={nombresExistentes} entries={entries}
+          onAdd={(entry) => { persistEntries([entry, ...entries]); showToast("Registrado ✓"); }} />
+      )}
+      {tab === "personas" && (
+        <Personas personasResumen={personasResumen} entries={entries}
+          selectedPerson={selectedPerson} setSelectedPerson={setSelectedPerson}
+          onAbonar={(entryId, monto) => {
+            const next = entries.map((e) => {
+              if (e.id !== entryId) return e;
+              const abono = e.abono + monto;
+              const saldo = Math.max(e.totalCompra - abono, 0);
+              return { ...e, abono, saldo, estado: saldo <= 0 ? "Pagado" : "Pendiente" };
+            });
+            persistEntries(next);
+            showToast("Pago registrado ✓");
+          }} />
+      )}
+      {tab === "productos" && (
+        <Productos products={products} onSave={(next) => { persistProducts(next); showToast("Productos actualizados ✓"); }} />
+      )}
+      {tab === "sync" && <Sync entries={entries} products={products} />}
+    </Shell>
+  );
+}
+
+function Shell({ children, tab, setTab, toast }) {
+  const tabs = [
+    { id: "resumen", label: "Resumen" },
+    { id: "registrar", label: "Registrar deuda" },
+    { id: "personas", label: "Personas" },
+    { id: "productos", label: "Productos" },
+    { id: "sync", label: "Sincronizar" },
+  ];
+  return (
+    <div style={{ "--sage": "#5A7A45", "--sage-dark": "#3F5C30", "--brown": "#5C3B22", "--ochre": "#C9A227", "--cream": "#FAF3E4", "--paper": "#F1ECDC", "--ink": "#2E3B2C", "--ink-soft": "#6B7566", "--rose": "#B85C5C", fontFamily: "'Inter', sans-serif", background: "var(--cream)", minHeight: "100vh", color: "var(--ink)" }}>
+      <style>{`
+        .sd-input { font-family: 'Inter', sans-serif; border: 1.5px solid #DDD5BE; background: #fff; border-radius: 8px; padding: 9px 11px; font-size: 14px; color: var(--ink); outline: none; transition: border-color .15s; }
+        .sd-input:focus { border-color: var(--sage); }
+        .sd-btn { font-family: 'Inter', sans-serif; font-weight: 600; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; cursor: pointer; transition: transform .1s, opacity .15s; }
+        .sd-btn:active { transform: scale(0.97); }
+        .sd-btn-primary { background: var(--sage); color: white; }
+        .sd-btn-primary:hover { background: var(--sage-dark); }
+        .sd-btn-ghost { background: transparent; color: var(--ink-soft); border: 1.5px solid #DDD5BE; }
+        .sd-btn-ghost:hover { border-color: var(--sage); color: var(--sage-dark); }
+        .sd-card { background: #fff; border: 1px solid #E9E2CC; border-radius: 14px; }
+        table.sd-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        table.sd-table th { text-align: left; font-weight: 600; color: var(--ink-soft); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; border-bottom: 2px solid var(--paper); }
+        table.sd-table td { padding: 9px 10px; border-bottom: 1px solid var(--paper); }
+        table.sd-table tr:hover td { background: #FBF9F1; }
+      `}</style>
+
+      <div style={{ maxWidth: 980, margin: "0 auto", padding: "0 20px" }}>
+        <header style={{ display: "flex", alignItems: "center", gap: 14, padding: "22px 0 6px" }}>
+          <Logo size={54} />
+          <div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, lineHeight: 1.1, color: "var(--sage-dark)" }}>Registro de deudas</div>
+            <div style={{ fontSize: 12.5, color: "var(--brown)" }}>Semillas · Cafetería Montessori — pagos pendientes</div>
+          </div>
+        </header>
+
+        <nav style={{ display: "flex", gap: 4, marginTop: 14, borderBottom: "1.5px solid #E9E2CC", flexWrap: "wrap" }}>
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ border: "none", background: "transparent", cursor: "pointer", padding: "10px 14px", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13.5,
+                color: tab === t.id ? "var(--sage-dark)" : "var(--ink-soft)",
+                borderBottom: tab === t.id ? "2.5px solid var(--sage)" : "2.5px solid transparent", marginBottom: -1.5 }}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        <main style={{ padding: "22px 0 60px" }}>{children}</main>
+      </div>
+
+      {toast && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--brown)", color: "white", padding: "10px 18px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,.18)" }}>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Resumen({ totals, personasResumen, onVerPersona }) {
+  const pendientes = personasResumen.filter((p) => p.saldo > 0);
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginBottom: 24 }}>
+        <StatCard label="Total pendiente de pago" value={CLP(totals.totalPendiente)} accent="var(--rose)" />
+        <StatCard label="Personas con deuda" value={totals.personas} accent="var(--ochre)" />
+        <StatCard label="Movimientos registrados" value={totals.movimientos} accent="var(--sage)" />
+      </div>
+
+      <div className="sd-card" style={{ padding: 18 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 12, color: "var(--sage-dark)" }}>Deudas actuales por persona</div>
+        {pendientes.length === 0 ? (
+          <EmptyState text="No hay deudas pendientes por ahora." />
+        ) : (
+          <table className="sd-table">
+            <thead><tr><th>Nombre</th><th>Curso / Rol</th><th>Movimientos</th><th style={{ textAlign: "right" }}>Saldo</th><th></th></tr></thead>
+            <tbody>
+              {pendientes.map((p) => (
+                <tr key={p.nombre}>
+                  <td style={{ fontWeight: 600 }}>{p.nombre}</td>
+                  <td style={{ color: "var(--ink-soft)" }}>{p.curso}</td>
+                  <td>{p.movimientos}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600, color: "var(--rose)" }}>{CLP(p.saldo)}</td>
+                  <td style={{ textAlign: "right" }}><button className="sd-btn sd-btn-ghost" style={{ padding: "5px 10px", fontSize: 12.5 }} onClick={() => onVerPersona(p.nombre)}>Ver detalle</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }) {
+  return (
+    <div className="sd-card" style={{ padding: "16px 18px", borderTop: `3px solid ${accent}` }}>
+      <div style={{ fontSize: 12, color: "var(--ink-soft)", fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600 }}>{value}</div>
+    </div>
+  );
+}
+
+function EmptyState({ text }) {
+  return (
+    <div style={{ padding: "10px 10px 4px", textAlign: "center", color: "var(--ink-soft)", fontSize: 13.5 }}>
+      <Mascota size={110} />
+      <div style={{ marginTop: 8 }}>{text}</div>
+    </div>
+  );
+}
+
+function RegistrarDeuda({ products, nombresExistentes, onAdd }) {
+  const [nombre, setNombre] = useState("");
+  const [curso, setCurso] = useState(CURSOS[0]);
+  const [productoSel, setProductoSel] = useState("");
+  const [productoLibre, setProductoLibre] = useState("");
+  const [cantidad, setCantidad] = useState(1);
+  const [valor, setValor] = useState("");
+  const [abono, setAbono] = useState(0);
+  const [obs, setObs] = useState("");
+
+  useEffect(() => {
+    const p = products.find((p) => p.name === productoSel);
+    if (p) setValor(p.price);
+  }, [productoSel, products]);
+
+  const producto = productoSel === "__otro__" ? productoLibre : productoSel;
+  const total = (Number(cantidad) || 0) * (Number(valor) || 0);
+  const saldo = Math.max(total - (Number(abono) || 0), 0);
+  const puedeGuardar = nombre.trim() && producto.trim() && Number(valor) > 0;
+
+  const guardar = () => {
+    if (!puedeGuardar) return;
+    onAdd({ id: uid(), fecha: todayStr(), nombre: nombre.trim(), curso, producto: producto.trim(),
+      cantidad: Number(cantidad) || 1, valor: Number(valor), totalCompra: total, abono: Number(abono) || 0,
+      saldo, estado: saldo <= 0 ? "Pagado" : "Pendiente", observacion: obs.trim() });
+    setProductoSel(""); setProductoLibre(""); setCantidad(1); setValor(""); setAbono(0); setObs("");
+  };
+
+  return (
+    <div className="sd-card" style={{ padding: 20, maxWidth: 620 }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 16, color: "var(--sage-dark)" }}>Nuevo registro</div>
+
+      <Field label="Nombre">
+        <input list="nombres-existentes" className="sd-input" style={{ width: "100%" }} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Lyon, Pauly, alexis…" />
+        <datalist id="nombres-existentes">{nombresExistentes.map((n) => <option key={n} value={n} />)}</datalist>
+        <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>Si ya existe, elígelo de la lista para que quede escrito siempre igual.</div>
+      </Field>
+
+      <Field label="Curso / Rol">
+        <select className="sd-input" style={{ width: "100%" }} value={curso} onChange={(e) => setCurso(e.target.value)}>
+          {CURSOS.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </Field>
+
+      <Field label="Producto">
+        <select className="sd-input" style={{ width: "100%" }} value={productoSel} onChange={(e) => setProductoSel(e.target.value)}>
+          <option value="">Selecciona un producto…</option>
+          {products.map((p) => <option key={p.name} value={p.name}>{p.name} — {CLP(p.price)}</option>)}
+          <option value="__otro__">Otro (escribir manualmente)</option>
+        </select>
+        {productoSel === "__otro__" && (
+          <input className="sd-input" style={{ width: "100%", marginTop: 8 }} value={productoLibre} onChange={(e) => setProductoLibre(e.target.value)} placeholder="Nombre del producto" />
+        )}
+      </Field>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <Field label="Cantidad"><input type="number" min={1} className="sd-input" style={{ width: "100%" }} value={cantidad} onChange={(e) => setCantidad(e.target.value)} /></Field>
+        <Field label="Valor unitario"><input type="number" min={0} className="sd-input" style={{ width: "100%" }} value={valor} onChange={(e) => setValor(e.target.value)} /></Field>
+        <Field label="Abono (opcional)"><input type="number" min={0} className="sd-input" style={{ width: "100%" }} value={abono} onChange={(e) => setAbono(e.target.value)} /></Field>
+      </div>
+
+      <Field label="Observación (opcional)">
+        <input className="sd-input" style={{ width: "100%" }} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej: cobrados en la app" />
+      </Field>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, padding: "12px 14px", background: "var(--paper)", borderRadius: 10 }}>
+        <div style={{ fontSize: 13 }}>Total: <b>{CLP(total)}</b> &nbsp;·&nbsp; Saldo: <b style={{ color: saldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(saldo)}</b></div>
+        <button className="sd-btn sd-btn-primary" disabled={!puedeGuardar} style={{ opacity: puedeGuardar ? 1 : 0.5 }} onClick={guardar}>Guardar registro</button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft)", marginBottom: 5 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function Personas({ personasResumen, entries, selectedPerson, setSelectedPerson, onAbonar }) {
+  const [filtro, setFiltro] = useState("");
+  const [abonoModal, setAbonoModal] = useState(null);
+  const lista = personasResumen.filter((p) => p.nombre.toLowerCase().includes(filtro.toLowerCase()));
+  const detalle = selectedPerson ? entries.filter((e) => e.nombre.trim().toLowerCase() === selectedPerson.trim().toLowerCase()) : [];
+
+  if (selectedPerson) {
+    const totalSaldo = detalle.reduce((s, e) => s + e.saldo, 0);
+    return (
+      <div>
+        <button className="sd-btn sd-btn-ghost" style={{ marginBottom: 14 }} onClick={() => setSelectedPerson(null)}>← Volver a personas</button>
+        <div className="sd-card" style={{ padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 14 }}>
+            <div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600 }}>{selectedPerson}</div>
+              <div style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>{detalle[0]?.curso}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 12, color: "var(--ink-soft)" }}>Saldo total</div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: totalSaldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(totalSaldo)}</div>
+            </div>
+          </div>
+          <table className="sd-table">
+            <thead><tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Abono</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+              {detalle.map((e) => (
+                <tr key={e.id}>
+                  <td>{e.fecha}</td><td>{e.producto}</td><td>{e.cantidad}</td><td>{CLP(e.totalCompra)}</td><td>{CLP(e.abono)}</td>
+                  <td style={{ fontWeight: 600, color: e.saldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(e.saldo)}</td>
+                  <td><span style={{ fontSize: 11.5, fontWeight: 600, padding: "3px 8px", borderRadius: 999, background: e.estado === "Pagado" ? "#E4EEE0" : "#FBF1DA", color: e.estado === "Pagado" ? "var(--sage-dark)" : "var(--ochre)" }}>{e.estado}</span></td>
+                  <td>{e.saldo > 0 && <button className="sd-btn sd-btn-ghost" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => setAbonoModal(e)}>Abonar</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {abonoModal && <AbonoModal entry={abonoModal} onClose={() => setAbonoModal(null)} onConfirm={(monto) => { onAbonar(abonoModal.id, monto); setAbonoModal(null); }} />}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <input className="sd-input" style={{ width: "100%", maxWidth: 320, marginBottom: 16 }} placeholder="Buscar persona…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+      <div className="sd-card" style={{ padding: 18 }}>
+        {lista.length === 0 ? <EmptyState text="No hay personas registradas todavía." /> : (
+          <table className="sd-table">
+            <thead><tr><th>Nombre</th><th>Curso / Rol</th><th>Movimientos</th><th style={{ textAlign: "right" }}>Saldo</th><th></th></tr></thead>
+            <tbody>
+              {lista.map((p) => (
+                <tr key={p.nombre}>
+                  <td style={{ fontWeight: 600 }}>{p.nombre}</td>
+                  <td style={{ color: "var(--ink-soft)" }}>{p.curso}</td>
+                  <td>{p.movimientos}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600, color: p.saldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(p.saldo)}</td>
+                  <td style={{ textAlign: "right" }}><button className="sd-btn sd-btn-ghost" style={{ padding: "5px 10px", fontSize: 12.5 }} onClick={() => setSelectedPerson(p.nombre)}>Ver detalle</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AbonoModal({ entry, onClose, onConfirm }) {
+  const [monto, setMonto] = useState(entry.saldo);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(46,59,44,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }} onClick={onClose}>
+      <div className="sd-card" style={{ padding: 22, width: 320 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Registrar pago</div>
+        <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 14 }}>{entry.producto} · saldo actual {CLP(entry.saldo)}</div>
+        <input type="number" className="sd-input" style={{ width: "100%" }} value={monto} onChange={(e) => setMonto(e.target.value)} />
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+          <button className="sd-btn sd-btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="sd-btn sd-btn-primary" onClick={() => onConfirm(Math.min(Number(monto) || 0, entry.saldo))}>Confirmar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Productos({ products, onSave }) {
+  const [nombre, setNombre] = useState("");
+  const [precio, setPrecio] = useState("");
+  const agregar = () => { if (!nombre.trim() || !Number(precio)) return; onSave([...products, { name: nombre.trim(), price: Number(precio) }]); setNombre(""); setPrecio(""); };
+  const eliminar = (name) => onSave(products.filter((p) => p.name !== name));
+  const actualizarPrecio = (name, price) => onSave(products.map((p) => p.name === name ? { ...p, price: Number(price) } : p));
+
+  return (
+    <div className="sd-card" style={{ padding: 20, maxWidth: 560 }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 14, color: "var(--sage-dark)" }}>Mantenedor de productos</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        <input className="sd-input" style={{ flex: 2 }} placeholder="Nombre del producto" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        <input type="number" className="sd-input" style={{ flex: 1 }} placeholder="Precio" value={precio} onChange={(e) => setPrecio(e.target.value)} />
+        <button className="sd-btn sd-btn-primary" onClick={agregar}>Agregar</button>
+      </div>
+      {products.length === 0 ? <EmptyState text="Aún no hay productos cargados." /> : (
+        <table className="sd-table">
+          <thead><tr><th>Producto</th><th>Precio</th><th></th></tr></thead>
+          <tbody>
+            {products.map((p) => (
+              <tr key={p.name}>
+                <td>{p.name}</td>
+                <td><input type="number" className="sd-input" style={{ width: 110 }} value={p.price} onChange={(e) => actualizarPrecio(p.name, e.target.value)} /></td>
+                <td><button className="sd-btn sd-btn-ghost" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => eliminar(p.name)}>Quitar</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function Sync({ entries, products }) {
+  const [webhook, setWebhook] = useState("");
+  const [estado, setEstado] = useState("");
+
+  const csv = useMemo(() => {
+    const header = ["Fecha","Nombre","Curso / Rol","Producto","Cantidad","Valor","Total compra","Abono","Saldo movimiento","Estado","Observación"];
+    const rows = entries.map((e) => [e.fecha, e.nombre, e.curso, e.producto, e.cantidad, e.valor, e.totalCompra, e.abono, e.saldo, e.estado, e.observacion || ""]);
+    return [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  }, [entries]);
+
+  const descargar = () => {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "RegistroDeudas.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const enviarASheet = async () => {
+    if (!webhook) return;
+    setEstado("Enviando…");
+    try {
+      await fetch(webhook, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) });
+      setEstado("Enviado ✓ (revisa la hoja para confirmar)");
+    } catch (e) {
+      setEstado("No se pudo enviar — revisa la URL");
+    }
+  };
+
+  const appsScript = `function doPost(e) {
+  const data = JSON.parse(e.postData.contents);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("RegistroDeudas");
+  sheet.getRange(2, 1, sheet.getMaxRows() - 1, 11).clearContent();
+  const rows = data.entries.map(r => [r.fecha, r.nombre, r.curso, r.producto, r.cantidad, r.valor, r.totalCompra, r.abono, r.saldo, r.estado, r.observacion || ""]);
+  if (rows.length) sheet.getRange(2, 1, rows.length, 11).setValues(rows);
+  return ContentService.createTextOutput("ok");
+}`;
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div className="sd-card" style={{ padding: 20 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>Exportar</div>
+        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 14 }}>Descarga el registro completo en formato compatible con tu planilla de Google Sheets (mismas columnas).</div>
+        <button className="sd-btn sd-btn-primary" onClick={descargar}>Descargar CSV</button>
+      </div>
+
+      <div className="sd-card" style={{ padding: 20 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>Escribir directo en tu Google Sheet</div>
+        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 12, lineHeight: 1.5 }}>
+          Esta app no puede iniciar sesión en tu cuenta de Google sola. La forma de que escriba <b>directo</b> en tu hoja es con un pequeño puente gratuito de Google (Apps Script). Se hace una sola vez:
+        </div>
+        <ol style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.8, paddingLeft: 18, marginBottom: 14 }}>
+          <li>Abre tu hoja <i>RegistroDeudas</i> → Extensiones → Apps Script.</li>
+          <li>Borra el contenido y pega el código de abajo → Guardar.</li>
+          <li>Implementar → Nueva implementación → tipo "Aplicación web" → acceso "Cualquier usuario" → Implementar.</li>
+          <li>Copia la URL que te entrega y pégala aquí abajo.</li>
+        </ol>
+        <pre style={{ background: "var(--paper)", padding: 12, borderRadius: 8, fontSize: 11.5, overflowX: "auto", marginBottom: 14 }}>{appsScript}</pre>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input className="sd-input" style={{ flex: 1 }} placeholder="Pega aquí la URL de la aplicación web" value={webhook} onChange={(e) => setWebhook(e.target.value)} />
+          <button className="sd-btn sd-btn-primary" onClick={enviarASheet}>Enviar ahora</button>
+        </div>
+        {estado && <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 8 }}>{estado}</div>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
