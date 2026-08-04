@@ -518,24 +518,48 @@ function EmptyState({
 function RegistrarDeuda({
   products,
   nombresExistentes,
+  entries,
   onAdd
 }) {
   const [nombre, setNombre] = useState("");
   const [curso, setCurso] = useState(CURSOS[0]);
-  const [productoSel, setProductoSel] = useState("");
-  const [productoLibre, setProductoLibre] = useState("");
+  const [cursoAuto, setCursoAuto] = useState(false);
+  const [productoTexto, setProductoTexto] = useState("");
   const [cantidad, setCantidad] = useState(1);
   const [valor, setValor] = useState("");
   const [abono, setAbono] = useState(0);
   const [obs, setObs] = useState("");
+  const cursoPorNombre = useMemo(() => {
+    const map = new Map();
+    // entries viene con lo más nuevo primero, así que la primera coincidencia es la más reciente
+    (entries || []).forEach(e => {
+      const key = e.nombre.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, e.curso);
+    });
+    return map;
+  }, [entries]);
   useEffect(() => {
-    const p = products.find(p => p.name === productoSel);
-    if (p) setValor(p.price);
-  }, [productoSel, products]);
-  const producto = productoSel === "__otro__" ? productoLibre : productoSel;
+    const key = nombre.trim().toLowerCase();
+    const cursoGuardado = cursoPorNombre.get(key);
+    if (cursoGuardado) {
+      setCurso(cursoGuardado);
+      setCursoAuto(true);
+    } else setCursoAuto(false);
+  }, [nombre, cursoPorNombre]);
+
+  // si el texto escrito calza exacto con un producto ya cargado, rellena el precio solo
+  useEffect(() => {
+    const match = products.find(p => p.name.toLowerCase() === productoTexto.trim().toLowerCase());
+    if (match) setValor(match.price);
+  }, [productoTexto, products]);
+  const productosFiltrados = useMemo(() => {
+    const q = productoTexto.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(p => p.name.toLowerCase().includes(q));
+  }, [productoTexto, products]);
   const total = (Number(cantidad) || 0) * (Number(valor) || 0);
   const saldo = Math.max(total - (Number(abono) || 0), 0);
-  const puedeGuardar = nombre.trim() && producto.trim() && Number(valor) > 0;
+  const puedeGuardar = nombre.trim() && productoTexto.trim() && Number(valor) > 0;
   const guardar = () => {
     if (!puedeGuardar) return;
     onAdd({
@@ -543,7 +567,7 @@ function RegistrarDeuda({
       fecha: todayStr(),
       nombre: nombre.trim(),
       curso,
-      producto: producto.trim(),
+      producto: productoTexto.trim(),
       cantidad: Number(cantidad) || 1,
       valor: Number(valor),
       totalCompra: total,
@@ -552,12 +576,12 @@ function RegistrarDeuda({
       estado: saldo <= 0 ? "Pagado" : "Pendiente",
       observacion: obs.trim()
     });
-    setProductoSel("");
-    setProductoLibre("");
+    setProductoTexto("");
     setCantidad(1);
     setValor("");
     setAbono(0);
     setObs("");
+    // nombre y curso quedan tal cual, para seguir registrando rápido a la misma persona
   };
   return /*#__PURE__*/React.createElement("div", {
     className: "sd-card",
@@ -596,43 +620,49 @@ function RegistrarDeuda({
       marginTop: 4
     }
   }, "Si ya existe, elígelo de la lista para que quede escrito siempre igual.")), /*#__PURE__*/React.createElement(Field, {
-    label: "Curso / Rol"
+    label: "Curso / Rol" + (cursoAuto ? " (autocompletado)" : "")
   }, /*#__PURE__*/React.createElement("select", {
     className: "sd-input",
     style: {
       width: "100%"
     },
     value: curso,
-    onChange: e => setCurso(e.target.value)
+    onChange: e => {
+      setCurso(e.target.value);
+      setCursoAuto(false);
+    }
   }, CURSOS.map(c => /*#__PURE__*/React.createElement("option", {
     key: c,
     value: c
-  }, c)))), /*#__PURE__*/React.createElement(Field, {
+  }, c))), cursoAuto && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--sage-dark)",
+      marginTop: 4
+    }
+  }, "Se rellenó solo porque ya tenías registrado a ", nombre.trim(), " en ese curso.")), /*#__PURE__*/React.createElement(Field, {
     label: "Producto"
-  }, /*#__PURE__*/React.createElement("select", {
+  }, /*#__PURE__*/React.createElement("input", {
+    list: "productos-existentes",
     className: "sd-input",
     style: {
       width: "100%"
     },
-    value: productoSel,
-    onChange: e => setProductoSel(e.target.value)
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "Selecciona un producto…"), products.map(p => /*#__PURE__*/React.createElement("option", {
+    value: productoTexto,
+    onChange: e => setProductoTexto(e.target.value),
+    placeholder: "Escribe para buscar o crear uno nuevo…"
+  }), /*#__PURE__*/React.createElement("datalist", {
+    id: "productos-existentes"
+  }, productosFiltrados.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.name,
     value: p.name
-  }, p.name, " — ", CLP(p.price))), /*#__PURE__*/React.createElement("option", {
-    value: "__otro__"
-  }, "Otro (escribir manualmente)")), productoSel === "__otro__" && /*#__PURE__*/React.createElement("input", {
-    className: "sd-input",
+  }, CLP(p.price)))), productoTexto.trim() && !products.find(p => p.name.toLowerCase() === productoTexto.trim().toLowerCase()) && /*#__PURE__*/React.createElement("div", {
     style: {
-      width: "100%",
-      marginTop: 8
-    },
-    value: productoLibre,
-    onChange: e => setProductoLibre(e.target.value),
-    placeholder: "Nombre del producto"
-  })), /*#__PURE__*/React.createElement("div", {
+      fontSize: 11.5,
+      color: "var(--ink-soft)",
+      marginTop: 4
+    }
+  }, "Es un producto nuevo — pon el valor unitario abajo.")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr 1fr",
