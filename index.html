@@ -15,26 +15,24 @@
 <body>
 <div id="root"></div>
 
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="./assets/vendor/react.production.min.js"></script>
+<script src="./assets/vendor/react-dom.production.min.js"></script>
 
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useMemo, useCallback } = React;
+<script>
+const {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback
+} = React;
 
 // ---------- Datos base ----------
-const CURSOS = [
-  "Preescolar", "Taller 1", "Taller 2", "5to", "6to", "7mo", "8vo",
-  "1medio", "2medio", "3medio", "4medio", "Secretaría", "Profesor", "Directivo",
-];
-
-const CLP = (n) => "$" + Math.round(n || 0).toLocaleString("es-CL");
-
+const CURSOS = ["Preescolar", "Taller 1", "Taller 2", "5to", "6to", "7mo", "8vo", "1medio", "2medio", "3medio", "4medio", "Secretaría", "Profesor", "Directivo"];
+const CLP = n => "$" + Math.round(n || 0).toLocaleString("es-CL");
 const todayStr = () => {
   const d = new Date();
   return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
 };
-
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 // ---------- Sincronización automática con Google Sheets ----------
@@ -60,14 +58,19 @@ async function loadLocal(key, fallback) {
   }
 }
 async function saveLocal(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.error(e); }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error(e);
+  }
 }
-
 async function fetchFromSheet() {
   const url = getApiUrl();
   if (!url) return null;
   try {
-    const res = await fetch(url, { method: "GET" });
+    const res = await fetch(url, {
+      method: "GET"
+    });
     const data = await res.json();
     return data; // { entries, products }
   } catch (e) {
@@ -75,7 +78,6 @@ async function fetchFromSheet() {
     return null;
   }
 }
-
 async function pushToSheet(payload) {
   const url = getApiUrl();
   if (!url) return;
@@ -83,22 +85,43 @@ async function pushToSheet(payload) {
     await fetch(url, {
       method: "POST",
       mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(payload),
+      headers: {
+        "Content-Type": "text/plain"
+      },
+      body: JSON.stringify(payload)
     });
   } catch (e) {
     console.error("sync push error", e);
   }
 }
-
-function Logo({ size = 40 }) {
-  return <img src="./assets/logo-semillas.png" alt="Semillas Cafetería Montessori" style={{ height: size, width: "auto", objectFit: "contain" }} />;
+function Logo({
+  size = 40
+}) {
+  return /*#__PURE__*/React.createElement("img", {
+    src: "./assets/logo-semillas.png",
+    alt: "Semillas Cafetería Montessori",
+    style: {
+      height: size,
+      width: "auto",
+      objectFit: "contain"
+    }
+  });
 }
-
-function Mascota({ size = 120, style = {} }) {
-  return <img src="./assets/semi-mascota.png" alt="Semi, la mascota de Semillas" style={{ height: size, width: "auto", objectFit: "contain", ...style }} />;
+function Mascota({
+  size = 120,
+  style = {}
+}) {
+  return /*#__PURE__*/React.createElement("img", {
+    src: "./assets/semi-mascota.png",
+    alt: "Semi, la mascota de Semillas",
+    style: {
+      height: size,
+      width: "auto",
+      objectFit: "contain",
+      ...style
+    }
+  });
 }
-
 function App() {
   const [tab, setTab] = useState("resumen");
   const [entries, setEntries] = useState([]);
@@ -106,11 +129,9 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [toast, setToast] = useState(null);
-
   const [apiUrl, setApiUrlState] = useState(getApiUrl());
   const [syncState, setSyncState] = useState(apiUrl ? "conectando" : "sin-configurar");
-
-  const refrescarDesdeSheet = useCallback(async (silencioso) => {
+  const refrescarDesdeSheet = useCallback(async silencioso => {
     if (!getApiUrl()) return;
     const data = await fetchFromSheet();
     if (data) {
@@ -123,7 +144,6 @@ function App() {
       setSyncState("error");
     }
   }, []);
-
   useEffect(() => {
     (async () => {
       const [eLocal, pLocal] = await Promise.all([loadLocal("deudas:entries", []), loadLocal("deudas:products", [])]);
@@ -140,41 +160,49 @@ function App() {
     const id = setInterval(() => refrescarDesdeSheet(true), POLL_MS);
     return () => clearInterval(id);
   }, [apiUrl, refrescarDesdeSheet]);
-
-  const persistEntries = useCallback(async (next) => {
+  const persistEntries = useCallback(async next => {
     setEntries(next);
     await saveLocal("deudas:entries", next);
-    pushToSheet({ entries: next });
+    pushToSheet({
+      entries: next
+    });
   }, []);
-  const persistProducts = useCallback(async (next) => {
+  const persistProducts = useCallback(async next => {
     setProducts(next);
     await saveLocal("deudas:products", next);
-    pushToSheet({ products: next });
+    pushToSheet({
+      products: next
+    });
   }, []);
-
-  const showToast = (msg) => {
+  const showToast = msg => {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
   };
-
   const nombresExistentes = useMemo(() => {
     const set = new Map();
-    entries.forEach((e) => set.set(e.nombre.trim().toLowerCase(), e.nombre));
+    entries.forEach(e => set.set(e.nombre.trim().toLowerCase(), e.nombre));
     return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "es"));
   }, [entries]);
-
   const totals = useMemo(() => {
-    const pendientes = entries.filter((e) => e.saldo > 0);
+    const pendientes = entries.filter(e => e.saldo > 0);
     const totalPendiente = pendientes.reduce((s, e) => s + e.saldo, 0);
-    const personasSet = new Set(pendientes.map((e) => e.nombre.trim().toLowerCase()));
-    return { totalPendiente, personas: personasSet.size, movimientos: entries.length };
+    const personasSet = new Set(pendientes.map(e => e.nombre.trim().toLowerCase()));
+    return {
+      totalPendiente,
+      personas: personasSet.size,
+      movimientos: entries.length
+    };
   }, [entries]);
-
   const personasResumen = useMemo(() => {
     const map = new Map();
-    entries.forEach((e) => {
+    entries.forEach(e => {
       const key = e.nombre.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, { nombre: e.nombre, curso: e.curso, saldo: 0, movimientos: 0 });
+      if (!map.has(key)) map.set(key, {
+        nombre: e.nombre,
+        curso: e.curso,
+        saldo: 0,
+        movimientos: 0
+      });
       const rec = map.get(key);
       rec.saldo += e.saldo;
       rec.movimientos += 1;
@@ -182,57 +210,108 @@ function App() {
     });
     return Array.from(map.values()).sort((a, b) => b.saldo - a.saldo);
   }, [entries]);
-
   if (loading) {
-    return <Shell><div style={{ padding: 40, textAlign: "center", color: "var(--ink-soft)" }}>Cargando registro…</div></Shell>;
+    return /*#__PURE__*/React.createElement(Shell, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 40,
+        textAlign: "center",
+        color: "var(--ink-soft)"
+      }
+    }, "Cargando registro…"));
   }
-
-  return (
-    <Shell tab={tab} setTab={setTab} toast={toast}>
-      {tab === "resumen" && (
-        <Resumen totals={totals} personasResumen={personasResumen}
-          onVerPersona={(n) => { setSelectedPerson(n); setTab("personas"); }} />
-      )}
-      {tab === "registrar" && (
-        <RegistrarDeuda products={products} nombresExistentes={nombresExistentes} entries={entries}
-          onAdd={(entry) => { persistEntries([entry, ...entries]); showToast("Registrado ✓"); }} />
-      )}
-      {tab === "personas" && (
-        <Personas personasResumen={personasResumen} entries={entries}
-          selectedPerson={selectedPerson} setSelectedPerson={setSelectedPerson}
-          onAbonar={(entryId, monto) => {
-            const next = entries.map((e) => {
-              if (e.id !== entryId) return e;
-              const abono = e.abono + monto;
-              const saldo = Math.max(e.totalCompra - abono, 0);
-              return { ...e, abono, saldo, estado: saldo <= 0 ? "Pagado" : "Pendiente" };
-            });
-            persistEntries(next);
-            showToast("Pago registrado ✓");
-          }} />
-      )}
-      {tab === "productos" && (
-        <Productos products={products} onSave={(next) => { persistProducts(next); showToast("Productos actualizados ✓"); }} />
-      )}
-      {tab === "sync" && (
-        <Sync entries={entries} products={products}
-          onConfigured={(url) => { setApiUrlState(url); refrescarDesdeSheet(false); }} />
-      )}
-    </Shell>
-  );
+  return /*#__PURE__*/React.createElement(Shell, {
+    tab: tab,
+    setTab: setTab,
+    toast: toast
+  }, tab === "resumen" && /*#__PURE__*/React.createElement(Resumen, {
+    totals: totals,
+    personasResumen: personasResumen,
+    onVerPersona: n => {
+      setSelectedPerson(n);
+      setTab("personas");
+    }
+  }), tab === "registrar" && /*#__PURE__*/React.createElement(RegistrarDeuda, {
+    products: products,
+    nombresExistentes: nombresExistentes,
+    entries: entries,
+    onAdd: entry => {
+      persistEntries([entry, ...entries]);
+      showToast("Registrado ✓");
+    }
+  }), tab === "personas" && /*#__PURE__*/React.createElement(Personas, {
+    personasResumen: personasResumen,
+    entries: entries,
+    selectedPerson: selectedPerson,
+    setSelectedPerson: setSelectedPerson,
+    onAbonar: (entryId, monto) => {
+      const next = entries.map(e => {
+        if (e.id !== entryId) return e;
+        const abono = e.abono + monto;
+        const saldo = Math.max(e.totalCompra - abono, 0);
+        return {
+          ...e,
+          abono,
+          saldo,
+          estado: saldo <= 0 ? "Pagado" : "Pendiente"
+        };
+      });
+      persistEntries(next);
+      showToast("Pago registrado ✓");
+    }
+  }), tab === "productos" && /*#__PURE__*/React.createElement(Productos, {
+    products: products,
+    onSave: next => {
+      persistProducts(next);
+      showToast("Productos actualizados ✓");
+    }
+  }), tab === "sync" && /*#__PURE__*/React.createElement(Sync, {
+    entries: entries,
+    products: products,
+    onConfigured: url => {
+      setApiUrlState(url);
+      refrescarDesdeSheet(false);
+    }
+  }));
 }
-
-function Shell({ children, tab, setTab, toast }) {
-  const tabs = [
-    { id: "resumen", label: "Resumen" },
-    { id: "registrar", label: "Registrar deuda" },
-    { id: "personas", label: "Personas" },
-    { id: "productos", label: "Productos" },
-    { id: "sync", label: "Sincronizar" },
-  ];
-  return (
-    <div style={{ "--sage": "#5A7A45", "--sage-dark": "#3F5C30", "--brown": "#5C3B22", "--ochre": "#C9A227", "--cream": "#FAF3E4", "--paper": "#F1ECDC", "--ink": "#2E3B2C", "--ink-soft": "#6B7566", "--rose": "#B85C5C", fontFamily: "'Inter', sans-serif", background: "var(--cream)", minHeight: "100vh", color: "var(--ink)" }}>
-      <style>{`
+function Shell({
+  children,
+  tab,
+  setTab,
+  toast
+}) {
+  const tabs = [{
+    id: "resumen",
+    label: "Resumen"
+  }, {
+    id: "registrar",
+    label: "Registrar deuda"
+  }, {
+    id: "personas",
+    label: "Personas"
+  }, {
+    id: "productos",
+    label: "Productos"
+  }, {
+    id: "sync",
+    label: "Sincronizar"
+  }];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      "--sage": "#5A7A45",
+      "--sage-dark": "#3F5C30",
+      "--brown": "#5C3B22",
+      "--ochre": "#C9A227",
+      "--cream": "#FAF3E4",
+      "--paper": "#F1ECDC",
+      "--ink": "#2E3B2C",
+      "--ink-soft": "#6B7566",
+      "--rose": "#B85C5C",
+      fontFamily: "'Inter', sans-serif",
+      background: "var(--cream)",
+      minHeight: "100vh",
+      color: "var(--ink)"
+    }
+  }, /*#__PURE__*/React.createElement("style", null, `
         .sd-input { font-family: 'Inter', sans-serif; border: 1.5px solid #DDD5BE; background: #fff; border-radius: 8px; padding: 9px 11px; font-size: 14px; color: var(--ink); outline: none; transition: border-color .15s; }
         .sd-input:focus { border-color: var(--sage); }
         .sd-btn { font-family: 'Inter', sans-serif; font-weight: 600; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; cursor: pointer; transition: transform .1s, opacity .15s; }
@@ -246,94 +325,201 @@ function Shell({ children, tab, setTab, toast }) {
         table.sd-table th { text-align: left; font-weight: 600; color: var(--ink-soft); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; border-bottom: 2px solid var(--paper); }
         table.sd-table td { padding: 9px 10px; border-bottom: 1px solid var(--paper); }
         table.sd-table tr:hover td { background: #FBF9F1; }
-      `}</style>
-
-      <div style={{ maxWidth: 980, margin: "0 auto", padding: "0 20px" }}>
-        <header style={{ display: "flex", alignItems: "center", gap: 14, padding: "22px 0 6px" }}>
-          <Logo size={160} />
-          <div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, lineHeight: 1.1, color: "var(--sage-dark)" }}>Registro de deudas</div>
-            <div style={{ fontSize: 12.5, color: "var(--brown)" }}>Semillas · Cafetería Montessori — pagos pendientes</div>
-          </div>
-        </header>
-
-        <nav style={{ display: "flex", gap: 4, marginTop: 14, borderBottom: "1.5px solid #E9E2CC", flexWrap: "wrap" }}>
-          {tabs.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ border: "none", background: "transparent", cursor: "pointer", padding: "10px 14px", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13.5,
-                color: tab === t.id ? "var(--sage-dark)" : "var(--ink-soft)",
-                borderBottom: tab === t.id ? "2.5px solid var(--sage)" : "2.5px solid transparent", marginBottom: -1.5 }}>
-              {t.label}
-            </button>
-          ))}
-        </nav>
-
-        <main style={{ padding: "22px 0 60px" }}>{children}</main>
-      </div>
-
-      {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--brown)", color: "white", padding: "10px 18px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,.18)" }}>
-          {toast}
-        </div>
-      )}
-    </div>
-  );
+      `), /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 980,
+      margin: "0 auto",
+      padding: "0 20px"
+    }
+  }, /*#__PURE__*/React.createElement("header", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      padding: "22px 0 6px"
+    }
+  }, /*#__PURE__*/React.createElement(Logo, {
+    size: 160
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 21,
+      fontWeight: 600,
+      lineHeight: 1.1,
+      color: "var(--sage-dark)"
+    }
+  }, "Registro de deudas"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--brown)"
+    }
+  }, "Semillas · Cafetería Montessori — pagos pendientes"))), /*#__PURE__*/React.createElement("nav", {
+    style: {
+      display: "flex",
+      gap: 4,
+      marginTop: 14,
+      borderBottom: "1.5px solid #E9E2CC",
+      flexWrap: "wrap"
+    }
+  }, tabs.map(t => /*#__PURE__*/React.createElement("button", {
+    key: t.id,
+    onClick: () => setTab(t.id),
+    style: {
+      border: "none",
+      background: "transparent",
+      cursor: "pointer",
+      padding: "10px 14px",
+      fontFamily: "'Inter', sans-serif",
+      fontWeight: 600,
+      fontSize: 13.5,
+      color: tab === t.id ? "var(--sage-dark)" : "var(--ink-soft)",
+      borderBottom: tab === t.id ? "2.5px solid var(--sage)" : "2.5px solid transparent",
+      marginBottom: -1.5
+    }
+  }, t.label))), /*#__PURE__*/React.createElement("main", {
+    style: {
+      padding: "22px 0 60px"
+    }
+  }, children)), toast && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      bottom: 24,
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "var(--brown)",
+      color: "white",
+      padding: "10px 18px",
+      borderRadius: 999,
+      fontSize: 13.5,
+      fontWeight: 600,
+      boxShadow: "0 8px 24px rgba(0,0,0,.18)"
+    }
+  }, toast));
 }
-
-function Resumen({ totals, personasResumen, onVerPersona }) {
-  const pendientes = personasResumen.filter((p) => p.saldo > 0);
-  return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginBottom: 24 }}>
-        <StatCard label="Total pendiente de pago" value={CLP(totals.totalPendiente)} accent="var(--rose)" />
-        <StatCard label="Personas con deuda" value={totals.personas} accent="var(--ochre)" />
-        <StatCard label="Movimientos registrados" value={totals.movimientos} accent="var(--sage)" />
-      </div>
-
-      <div className="sd-card" style={{ padding: 18 }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 12, color: "var(--sage-dark)" }}>Deudas actuales por persona</div>
-        {pendientes.length === 0 ? (
-          <EmptyState text="No hay deudas pendientes por ahora." />
-        ) : (
-          <table className="sd-table">
-            <thead><tr><th>Nombre</th><th>Curso / Rol</th><th>Movimientos</th><th style={{ textAlign: "right" }}>Saldo</th><th></th></tr></thead>
-            <tbody>
-              {pendientes.map((p) => (
-                <tr key={p.nombre}>
-                  <td style={{ fontWeight: 600 }}>{p.nombre}</td>
-                  <td style={{ color: "var(--ink-soft)" }}>{p.curso}</td>
-                  <td>{p.movimientos}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600, color: "var(--rose)" }}>{CLP(p.saldo)}</td>
-                  <td style={{ textAlign: "right" }}><button className="sd-btn sd-btn-ghost" style={{ padding: "5px 10px", fontSize: 12.5 }} onClick={() => onVerPersona(p.nombre)}>Ver detalle</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
+function Resumen({
+  totals,
+  personasResumen,
+  onVerPersona
+}) {
+  const pendientes = personasResumen.filter(p => p.saldo > 0);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+      gap: 14,
+      marginBottom: 24
+    }
+  }, /*#__PURE__*/React.createElement(StatCard, {
+    label: "Total pendiente de pago",
+    value: CLP(totals.totalPendiente),
+    accent: "var(--rose)"
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "Personas con deuda",
+    value: totals.personas,
+    accent: "var(--ochre)"
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "Movimientos registrados",
+    value: totals.movimientos,
+    accent: "var(--sage)"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      fontWeight: 600,
+      marginBottom: 12,
+      color: "var(--sage-dark)"
+    }
+  }, "Deudas actuales por persona"), pendientes.length === 0 ? /*#__PURE__*/React.createElement(EmptyState, {
+    text: "No hay deudas pendientes por ahora."
+  }) : /*#__PURE__*/React.createElement("table", {
+    className: "sd-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Nombre"), /*#__PURE__*/React.createElement("th", null, "Curso / Rol"), /*#__PURE__*/React.createElement("th", null, "Movimientos"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: "right"
+    }
+  }, "Saldo"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, pendientes.map(p => /*#__PURE__*/React.createElement("tr", {
+    key: p.nombre
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 600
+    }
+  }, p.nombre), /*#__PURE__*/React.createElement("td", {
+    style: {
+      color: "var(--ink-soft)"
+    }
+  }, p.curso), /*#__PURE__*/React.createElement("td", null, p.movimientos), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: "right",
+      fontWeight: 600,
+      color: "var(--rose)"
+    }
+  }, CLP(p.saldo)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-ghost",
+    style: {
+      padding: "5px 10px",
+      fontSize: 12.5
+    },
+    onClick: () => onVerPersona(p.nombre)
+  }, "Ver detalle"))))))));
 }
-
-function StatCard({ label, value, accent }) {
-  return (
-    <div className="sd-card" style={{ padding: "16px 18px", borderTop: `3px solid ${accent}` }}>
-      <div style={{ fontSize: 12, color: "var(--ink-soft)", fontWeight: 600, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600 }}>{value}</div>
-    </div>
-  );
+function StatCard({
+  label,
+  value,
+  accent
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: "16px 18px",
+      borderTop: `3px solid ${accent}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "var(--ink-soft)",
+      fontWeight: 600,
+      marginBottom: 6
+    }
+  }, label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 26,
+      fontWeight: 600
+    }
+  }, value));
 }
-
-function EmptyState({ text }) {
-  return (
-    <div style={{ padding: "10px 10px 4px", textAlign: "center", color: "var(--ink-soft)", fontSize: 13.5 }}>
-      <Mascota size={110} />
-      <div style={{ marginTop: 8 }}>{text}</div>
-    </div>
-  );
+function EmptyState({
+  text
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "10px 10px 4px",
+      textAlign: "center",
+      color: "var(--ink-soft)",
+      fontSize: 13.5
+    }
+  }, /*#__PURE__*/React.createElement(Mascota, {
+    size: 110
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8
+    }
+  }, text));
 }
-
-function RegistrarDeuda({ products, nombresExistentes, onAdd }) {
+function RegistrarDeuda({
+  products,
+  nombresExistentes,
+  onAdd
+}) {
   const [nombre, setNombre] = useState("");
   const [curso, setCurso] = useState(CURSOS[0]);
   const [productoSel, setProductoSel] = useState("");
@@ -342,268 +528,604 @@ function RegistrarDeuda({ products, nombresExistentes, onAdd }) {
   const [valor, setValor] = useState("");
   const [abono, setAbono] = useState(0);
   const [obs, setObs] = useState("");
-
   useEffect(() => {
-    const p = products.find((p) => p.name === productoSel);
+    const p = products.find(p => p.name === productoSel);
     if (p) setValor(p.price);
   }, [productoSel, products]);
-
   const producto = productoSel === "__otro__" ? productoLibre : productoSel;
   const total = (Number(cantidad) || 0) * (Number(valor) || 0);
   const saldo = Math.max(total - (Number(abono) || 0), 0);
   const puedeGuardar = nombre.trim() && producto.trim() && Number(valor) > 0;
-
   const guardar = () => {
     if (!puedeGuardar) return;
-    onAdd({ id: uid(), fecha: todayStr(), nombre: nombre.trim(), curso, producto: producto.trim(),
-      cantidad: Number(cantidad) || 1, valor: Number(valor), totalCompra: total, abono: Number(abono) || 0,
-      saldo, estado: saldo <= 0 ? "Pagado" : "Pendiente", observacion: obs.trim() });
-    setProductoSel(""); setProductoLibre(""); setCantidad(1); setValor(""); setAbono(0); setObs("");
+    onAdd({
+      id: uid(),
+      fecha: todayStr(),
+      nombre: nombre.trim(),
+      curso,
+      producto: producto.trim(),
+      cantidad: Number(cantidad) || 1,
+      valor: Number(valor),
+      totalCompra: total,
+      abono: Number(abono) || 0,
+      saldo,
+      estado: saldo <= 0 ? "Pagado" : "Pendiente",
+      observacion: obs.trim()
+    });
+    setProductoSel("");
+    setProductoLibre("");
+    setCantidad(1);
+    setValor("");
+    setAbono(0);
+    setObs("");
   };
-
-  return (
-    <div className="sd-card" style={{ padding: 20, maxWidth: 620 }}>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 16, color: "var(--sage-dark)" }}>Nuevo registro</div>
-
-      <Field label="Nombre">
-        <input list="nombres-existentes" className="sd-input" style={{ width: "100%" }} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Lyon, Pauly, alexis…" />
-        <datalist id="nombres-existentes">{nombresExistentes.map((n) => <option key={n} value={n} />)}</datalist>
-        <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>Si ya existe, elígelo de la lista para que quede escrito siempre igual.</div>
-      </Field>
-
-      <Field label="Curso / Rol">
-        <select className="sd-input" style={{ width: "100%" }} value={curso} onChange={(e) => setCurso(e.target.value)}>
-          {CURSOS.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </Field>
-
-      <Field label="Producto">
-        <select className="sd-input" style={{ width: "100%" }} value={productoSel} onChange={(e) => setProductoSel(e.target.value)}>
-          <option value="">Selecciona un producto…</option>
-          {products.map((p) => <option key={p.name} value={p.name}>{p.name} — {CLP(p.price)}</option>)}
-          <option value="__otro__">Otro (escribir manualmente)</option>
-        </select>
-        {productoSel === "__otro__" && (
-          <input className="sd-input" style={{ width: "100%", marginTop: 8 }} value={productoLibre} onChange={(e) => setProductoLibre(e.target.value)} placeholder="Nombre del producto" />
-        )}
-      </Field>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        <Field label="Cantidad"><input type="number" min={1} className="sd-input" style={{ width: "100%" }} value={cantidad} onChange={(e) => setCantidad(e.target.value)} /></Field>
-        <Field label="Valor unitario"><input type="number" min={0} className="sd-input" style={{ width: "100%" }} value={valor} onChange={(e) => setValor(e.target.value)} /></Field>
-        <Field label="Abono (opcional)"><input type="number" min={0} className="sd-input" style={{ width: "100%" }} value={abono} onChange={(e) => setAbono(e.target.value)} /></Field>
-      </div>
-
-      <Field label="Observación (opcional)">
-        <input className="sd-input" style={{ width: "100%" }} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej: cobrados en la app" />
-      </Field>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, padding: "12px 14px", background: "var(--paper)", borderRadius: 10 }}>
-        <div style={{ fontSize: 13 }}>Total: <b>{CLP(total)}</b> &nbsp;·&nbsp; Saldo: <b style={{ color: saldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(saldo)}</b></div>
-        <button className="sd-btn sd-btn-primary" disabled={!puedeGuardar} style={{ opacity: puedeGuardar ? 1 : 0.5 }} onClick={guardar}>Guardar registro</button>
-      </div>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: 20,
+      maxWidth: 620
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      fontWeight: 600,
+      marginBottom: 16,
+      color: "var(--sage-dark)"
+    }
+  }, "Nuevo registro"), /*#__PURE__*/React.createElement(Field, {
+    label: "Nombre"
+  }, /*#__PURE__*/React.createElement("input", {
+    list: "nombres-existentes",
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: nombre,
+    onChange: e => setNombre(e.target.value),
+    placeholder: "Ej: Lyon, Pauly, alexis…"
+  }), /*#__PURE__*/React.createElement("datalist", {
+    id: "nombres-existentes"
+  }, nombresExistentes.map(n => /*#__PURE__*/React.createElement("option", {
+    key: n,
+    value: n
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--ink-soft)",
+      marginTop: 4
+    }
+  }, "Si ya existe, elígelo de la lista para que quede escrito siempre igual.")), /*#__PURE__*/React.createElement(Field, {
+    label: "Curso / Rol"
+  }, /*#__PURE__*/React.createElement("select", {
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: curso,
+    onChange: e => setCurso(e.target.value)
+  }, CURSOS.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c,
+    value: c
+  }, c)))), /*#__PURE__*/React.createElement(Field, {
+    label: "Producto"
+  }, /*#__PURE__*/React.createElement("select", {
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: productoSel,
+    onChange: e => setProductoSel(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Selecciona un producto…"), products.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.name,
+    value: p.name
+  }, p.name, " — ", CLP(p.price))), /*#__PURE__*/React.createElement("option", {
+    value: "__otro__"
+  }, "Otro (escribir manualmente)")), productoSel === "__otro__" && /*#__PURE__*/React.createElement("input", {
+    className: "sd-input",
+    style: {
+      width: "100%",
+      marginTop: 8
+    },
+    value: productoLibre,
+    onChange: e => setProductoLibre(e.target.value),
+    placeholder: "Nombre del producto"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Cantidad"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: 1,
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: cantidad,
+    onChange: e => setCantidad(e.target.value)
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Valor unitario"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: 0,
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: valor,
+    onChange: e => setValor(e.target.value)
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Abono (opcional)"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: 0,
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: abono,
+    onChange: e => setAbono(e.target.value)
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Observación (opcional)"
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: obs,
+    onChange: e => setObs(e.target.value),
+    placeholder: "Ej: cobrados en la app"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 16,
+      padding: "12px 14px",
+      background: "var(--paper)",
+      borderRadius: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13
+    }
+  }, "Total: ", /*#__PURE__*/React.createElement("b", null, CLP(total)), " \xA0·\xA0 Saldo: ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: saldo > 0 ? "var(--rose)" : "var(--sage-dark)"
+    }
+  }, CLP(saldo))), /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-primary",
+    disabled: !puedeGuardar,
+    style: {
+      opacity: puedeGuardar ? 1 : 0.5
+    },
+    onClick: guardar
+  }, "Guardar registro")));
 }
-
-function Field({ label, children }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft)", marginBottom: 5 }}>{label}</div>
-      {children}
-    </div>
-  );
+function Field({
+  label,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      fontWeight: 600,
+      color: "var(--ink-soft)",
+      marginBottom: 5
+    }
+  }, label), children);
 }
-
-function Personas({ personasResumen, entries, selectedPerson, setSelectedPerson, onAbonar }) {
+function Personas({
+  personasResumen,
+  entries,
+  selectedPerson,
+  setSelectedPerson,
+  onAbonar
+}) {
   const [filtro, setFiltro] = useState("");
   const [abonoModal, setAbonoModal] = useState(null);
-  const lista = personasResumen.filter((p) => p.nombre.toLowerCase().includes(filtro.toLowerCase()));
-  const detalle = selectedPerson ? entries.filter((e) => e.nombre.trim().toLowerCase() === selectedPerson.trim().toLowerCase()) : [];
-
+  const lista = personasResumen.filter(p => p.nombre.toLowerCase().includes(filtro.toLowerCase()));
+  const detalle = selectedPerson ? entries.filter(e => e.nombre.trim().toLowerCase() === selectedPerson.trim().toLowerCase()) : [];
   if (selectedPerson) {
     const totalSaldo = detalle.reduce((s, e) => s + e.saldo, 0);
-    return (
-      <div>
-        <button className="sd-btn sd-btn-ghost" style={{ marginBottom: 14 }} onClick={() => setSelectedPerson(null)}>← Volver a personas</button>
-        <div className="sd-card" style={{ padding: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 14 }}>
-            <div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600 }}>{selectedPerson}</div>
-              <div style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>{detalle[0]?.curso}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 12, color: "var(--ink-soft)" }}>Saldo total</div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: totalSaldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(totalSaldo)}</div>
-            </div>
-          </div>
-          <table className="sd-table">
-            <thead><tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Abono</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
-            <tbody>
-              {detalle.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.fecha}</td><td>{e.producto}</td><td>{e.cantidad}</td><td>{CLP(e.totalCompra)}</td><td>{CLP(e.abono)}</td>
-                  <td style={{ fontWeight: 600, color: e.saldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(e.saldo)}</td>
-                  <td><span style={{ fontSize: 11.5, fontWeight: 600, padding: "3px 8px", borderRadius: 999, background: e.estado === "Pagado" ? "#E4EEE0" : "#FBF1DA", color: e.estado === "Pagado" ? "var(--sage-dark)" : "var(--ochre)" }}>{e.estado}</span></td>
-                  <td>{e.saldo > 0 && <button className="sd-btn sd-btn-ghost" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => setAbonoModal(e)}>Abonar</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {abonoModal && <AbonoModal entry={abonoModal} onClose={() => setAbonoModal(null)} onConfirm={(monto) => { onAbonar(abonoModal.id, monto); setAbonoModal(null); }} />}
-      </div>
-    );
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
+      className: "sd-btn sd-btn-ghost",
+      style: {
+        marginBottom: 14
+      },
+      onClick: () => setSelectedPerson(null)
+    }, "← Volver a personas"), /*#__PURE__*/React.createElement("div", {
+      className: "sd-card",
+      style: {
+        padding: 20
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "start",
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: "'Fraunces', serif",
+        fontSize: 19,
+        fontWeight: 600
+      }
+    }, selectedPerson), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: "var(--ink-soft)"
+      }
+    }, detalle[0]?.curso)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "right"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "var(--ink-soft)"
+      }
+    }, "Saldo total"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: "'Fraunces', serif",
+        fontSize: 22,
+        fontWeight: 600,
+        color: totalSaldo > 0 ? "var(--rose)" : "var(--sage-dark)"
+      }
+    }, CLP(totalSaldo)))), /*#__PURE__*/React.createElement("table", {
+      className: "sd-table"
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Fecha"), /*#__PURE__*/React.createElement("th", null, "Producto"), /*#__PURE__*/React.createElement("th", null, "Cant."), /*#__PURE__*/React.createElement("th", null, "Total"), /*#__PURE__*/React.createElement("th", null, "Abono"), /*#__PURE__*/React.createElement("th", null, "Saldo"), /*#__PURE__*/React.createElement("th", null, "Estado"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, detalle.map(e => /*#__PURE__*/React.createElement("tr", {
+      key: e.id
+    }, /*#__PURE__*/React.createElement("td", null, e.fecha), /*#__PURE__*/React.createElement("td", null, e.producto), /*#__PURE__*/React.createElement("td", null, e.cantidad), /*#__PURE__*/React.createElement("td", null, CLP(e.totalCompra)), /*#__PURE__*/React.createElement("td", null, CLP(e.abono)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        fontWeight: 600,
+        color: e.saldo > 0 ? "var(--rose)" : "var(--sage-dark)"
+      }
+    }, CLP(e.saldo)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11.5,
+        fontWeight: 600,
+        padding: "3px 8px",
+        borderRadius: 999,
+        background: e.estado === "Pagado" ? "#E4EEE0" : "#FBF1DA",
+        color: e.estado === "Pagado" ? "var(--sage-dark)" : "var(--ochre)"
+      }
+    }, e.estado)), /*#__PURE__*/React.createElement("td", null, e.saldo > 0 && /*#__PURE__*/React.createElement("button", {
+      className: "sd-btn sd-btn-ghost",
+      style: {
+        padding: "4px 9px",
+        fontSize: 12
+      },
+      onClick: () => setAbonoModal(e)
+    }, "Abonar"))))))), abonoModal && /*#__PURE__*/React.createElement(AbonoModal, {
+      entry: abonoModal,
+      onClose: () => setAbonoModal(null),
+      onConfirm: monto => {
+        onAbonar(abonoModal.id, monto);
+        setAbonoModal(null);
+      }
+    }));
   }
-
-  return (
-    <div>
-      <input className="sd-input" style={{ width: "100%", maxWidth: 320, marginBottom: 16 }} placeholder="Buscar persona…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
-      <div className="sd-card" style={{ padding: 18 }}>
-        {lista.length === 0 ? <EmptyState text="No hay personas registradas todavía." /> : (
-          <table className="sd-table">
-            <thead><tr><th>Nombre</th><th>Curso / Rol</th><th>Movimientos</th><th style={{ textAlign: "right" }}>Saldo</th><th></th></tr></thead>
-            <tbody>
-              {lista.map((p) => (
-                <tr key={p.nombre}>
-                  <td style={{ fontWeight: 600 }}>{p.nombre}</td>
-                  <td style={{ color: "var(--ink-soft)" }}>{p.curso}</td>
-                  <td>{p.movimientos}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600, color: p.saldo > 0 ? "var(--rose)" : "var(--sage-dark)" }}>{CLP(p.saldo)}</td>
-                  <td style={{ textAlign: "right" }}><button className="sd-btn sd-btn-ghost" style={{ padding: "5px 10px", fontSize: 12.5 }} onClick={() => setSelectedPerson(p.nombre)}>Ver detalle</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("input", {
+    className: "sd-input",
+    style: {
+      width: "100%",
+      maxWidth: 320,
+      marginBottom: 16
+    },
+    placeholder: "Buscar persona…",
+    value: filtro,
+    onChange: e => setFiltro(e.target.value)
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: 18
+    }
+  }, lista.length === 0 ? /*#__PURE__*/React.createElement(EmptyState, {
+    text: "No hay personas registradas todavía."
+  }) : /*#__PURE__*/React.createElement("table", {
+    className: "sd-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Nombre"), /*#__PURE__*/React.createElement("th", null, "Curso / Rol"), /*#__PURE__*/React.createElement("th", null, "Movimientos"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: "right"
+    }
+  }, "Saldo"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, lista.map(p => /*#__PURE__*/React.createElement("tr", {
+    key: p.nombre
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 600
+    }
+  }, p.nombre), /*#__PURE__*/React.createElement("td", {
+    style: {
+      color: "var(--ink-soft)"
+    }
+  }, p.curso), /*#__PURE__*/React.createElement("td", null, p.movimientos), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: "right",
+      fontWeight: 600,
+      color: p.saldo > 0 ? "var(--rose)" : "var(--sage-dark)"
+    }
+  }, CLP(p.saldo)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-ghost",
+    style: {
+      padding: "5px 10px",
+      fontSize: 12.5
+    },
+    onClick: () => setSelectedPerson(p.nombre)
+  }, "Ver detalle"))))))));
 }
-
-function AbonoModal({ entry, onClose, onConfirm }) {
+function AbonoModal({
+  entry,
+  onClose,
+  onConfirm
+}) {
   const [monto, setMonto] = useState(entry.saldo);
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(46,59,44,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }} onClick={onClose}>
-      <div className="sd-card" style={{ padding: 22, width: 320 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Registrar pago</div>
-        <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 14 }}>{entry.producto} · saldo actual {CLP(entry.saldo)}</div>
-        <input type="number" className="sd-input" style={{ width: "100%" }} value={monto} onChange={(e) => setMonto(e.target.value)} />
-        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
-          <button className="sd-btn sd-btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="sd-btn sd-btn-primary" onClick={() => onConfirm(Math.min(Number(monto) || 0, entry.saldo))}>Confirmar</button>
-        </div>
-      </div>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(46,59,44,.35)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 50
+    },
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: 22,
+      width: 320
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "Registrar pago"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--ink-soft)",
+      marginBottom: 14
+    }
+  }, entry.producto, " · saldo actual ", CLP(entry.saldo)), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    className: "sd-input",
+    style: {
+      width: "100%"
+    },
+    value: monto,
+    onChange: e => setMonto(e.target.value)
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 16,
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-ghost",
+    onClick: onClose
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-primary",
+    onClick: () => onConfirm(Math.min(Number(monto) || 0, entry.saldo))
+  }, "Confirmar"))));
 }
-
-function Productos({ products, onSave }) {
+function Productos({
+  products,
+  onSave
+}) {
   const [nombre, setNombre] = useState("");
   const [precio, setPrecio] = useState("");
   const [masivo, setMasivo] = useState(false);
   const [texto, setTexto] = useState("");
   const [previewErr, setPreviewErr] = useState("");
-
-  const agregar = () => { if (!nombre.trim() || !Number(precio)) return; onSave([...products, { name: nombre.trim(), price: Number(precio) }]); setNombre(""); setPrecio(""); };
-  const eliminar = (name) => onSave(products.filter((p) => p.name !== name));
-  const actualizarPrecio = (name, price) => onSave(products.map((p) => p.name === name ? { ...p, price: Number(price) } : p));
-
-  const parsearMasivo = (raw) => {
-    const lineas = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+  const agregar = () => {
+    if (!nombre.trim() || !Number(precio)) return;
+    onSave([...products, {
+      name: nombre.trim(),
+      price: Number(precio)
+    }]);
+    setNombre("");
+    setPrecio("");
+  };
+  const eliminar = name => onSave(products.filter(p => p.name !== name));
+  const actualizarPrecio = (name, price) => onSave(products.map(p => p.name === name ? {
+    ...p,
+    price: Number(price)
+  } : p));
+  const parsearMasivo = raw => {
+    const lineas = raw.split("\n").map(l => l.trim()).filter(Boolean);
     const nuevos = [];
     for (const linea of lineas) {
-      const partes = linea.split(/[,;\t]| {2,}/).map((s) => s.trim()).filter(Boolean);
+      const partes = linea.split(/[,;\t]| {2,}/).map(s => s.trim()).filter(Boolean);
       if (partes.length < 2) continue;
       const precioTxt = partes[partes.length - 1].replace(/[^\d.,-]/g, "").replace(/\./g, "").replace(",", ".");
       const precioNum = Number(precioTxt);
       const nombreTxt = partes.slice(0, -1).join(" ").trim();
-      if (nombreTxt && precioNum > 0) nuevos.push({ name: nombreTxt, price: precioNum });
+      if (nombreTxt && precioNum > 0) nuevos.push({
+        name: nombreTxt,
+        price: precioNum
+      });
     }
     return nuevos;
   };
-
   const nuevosDetectados = masivo ? parsearMasivo(texto) : [];
-
   const cargarMasivo = () => {
-    if (nuevosDetectados.length === 0) { setPreviewErr("No detecté productos válidos. Usa el formato: Nombre, Precio (uno por línea)."); return; }
-    const existentes = new Map(products.map((p) => [p.name.toLowerCase(), p]));
-    nuevosDetectados.forEach((n) => existentes.set(n.name.toLowerCase(), n)); // si ya existe, actualiza el precio
+    if (nuevosDetectados.length === 0) {
+      setPreviewErr("No detecté productos válidos. Usa el formato: Nombre, Precio (uno por línea).");
+      return;
+    }
+    const existentes = new Map(products.map(p => [p.name.toLowerCase(), p]));
+    nuevosDetectados.forEach(n => existentes.set(n.name.toLowerCase(), n)); // si ya existe, actualiza el precio
     onSave(Array.from(existentes.values()));
-    setTexto(""); setMasivo(false); setPreviewErr("");
+    setTexto("");
+    setMasivo(false);
+    setPreviewErr("");
   };
-
-  return (
-    <div className="sd-card" style={{ padding: 20, maxWidth: 620 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "var(--sage-dark)" }}>Mantenedor de productos</div>
-        <button className="sd-btn sd-btn-ghost" style={{ padding: "5px 10px", fontSize: 12.5 }} onClick={() => setMasivo((v) => !v)}>
-          {masivo ? "Agregar uno por uno" : "Cargar varios de una vez"}
-        </button>
-      </div>
-
-      {masivo ? (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 8 }}>
-            Pega la lista, un producto por línea. Sirve separado por coma, punto y coma o tabulación (como si lo copiaras de Excel/Sheets): <br />
-            <code style={{ background: "var(--paper)", padding: "1px 5px", borderRadius: 4 }}>Mix frutos secos, 1200</code>
-          </div>
-          <textarea className="sd-input" style={{ width: "100%", minHeight: 140, fontFamily: "monospace", fontSize: 13 }}
-            placeholder={"Mix frutos secos, 1200\nQueque Avena Naranja Chips, 1100\nPan pita chia, linaza con huevo y jamón, 1990"}
-            value={texto} onChange={(e) => { setTexto(e.target.value); setPreviewErr(""); }} />
-          {texto.trim() && (
-            <div style={{ fontSize: 12, color: "var(--ink-soft)", margin: "8px 0" }}>
-              Detecté <b>{nuevosDetectados.length}</b> producto{nuevosDetectados.length !== 1 ? "s" : ""} válido{nuevosDetectados.length !== 1 ? "s" : ""}.
-            </div>
-          )}
-          {previewErr && <div style={{ fontSize: 12, color: "var(--rose)", marginBottom: 8 }}>{previewErr}</div>}
-          <button className="sd-btn sd-btn-primary" onClick={cargarMasivo}>Cargar {nuevosDetectados.length > 0 ? `(${nuevosDetectados.length})` : ""}</button>
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-          <input className="sd-input" style={{ flex: 2 }} placeholder="Nombre del producto" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-          <input type="number" className="sd-input" style={{ flex: 1 }} placeholder="Precio" value={precio} onChange={(e) => setPrecio(e.target.value)} />
-          <button className="sd-btn sd-btn-primary" onClick={agregar}>Agregar</button>
-        </div>
-      )}
-
-      {products.length === 0 ? <EmptyState text="Aún no hay productos cargados." /> : (
-        <table className="sd-table">
-          <thead><tr><th>Producto</th><th>Precio</th><th></th></tr></thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.name}>
-                <td>{p.name}</td>
-                <td><input type="number" className="sd-input" style={{ width: 110 }} value={p.price} onChange={(e) => actualizarPrecio(p.name, e.target.value)} /></td>
-                <td><button className="sd-btn sd-btn-ghost" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => eliminar(p.name)}>Quitar</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: 20,
+      maxWidth: 620
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      fontWeight: 600,
+      color: "var(--sage-dark)"
+    }
+  }, "Mantenedor de productos"), /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-ghost",
+    style: {
+      padding: "5px 10px",
+      fontSize: 12.5
+    },
+    onClick: () => setMasivo(v => !v)
+  }, masivo ? "Agregar uno por uno" : "Cargar varios de una vez")), masivo ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--ink-soft)",
+      marginBottom: 8
+    }
+  }, "Pega la lista, un producto por línea. Sirve separado por coma, punto y coma o tabulación (como si lo copiaras de Excel/Sheets): ", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("code", {
+    style: {
+      background: "var(--paper)",
+      padding: "1px 5px",
+      borderRadius: 4
+    }
+  }, "Mix frutos secos, 1200")), /*#__PURE__*/React.createElement("textarea", {
+    className: "sd-input",
+    style: {
+      width: "100%",
+      minHeight: 140,
+      fontFamily: "monospace",
+      fontSize: 13
+    },
+    placeholder: "Mix frutos secos, 1200\nQueque Avena Naranja Chips, 1100\nPan pita chia, linaza con huevo y jamón, 1990",
+    value: texto,
+    onChange: e => {
+      setTexto(e.target.value);
+      setPreviewErr("");
+    }
+  }), texto.trim() && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "var(--ink-soft)",
+      margin: "8px 0"
+    }
+  }, "Detecté ", /*#__PURE__*/React.createElement("b", null, nuevosDetectados.length), " producto", nuevosDetectados.length !== 1 ? "s" : "", " válido", nuevosDetectados.length !== 1 ? "s" : "", "."), previewErr && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "var(--rose)",
+      marginBottom: 8
+    }
+  }, previewErr), /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-primary",
+    onClick: cargarMasivo
+  }, "Cargar ", nuevosDetectados.length > 0 ? `(${nuevosDetectados.length})` : "")) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "sd-input",
+    style: {
+      flex: 2
+    },
+    placeholder: "Nombre del producto",
+    value: nombre,
+    onChange: e => setNombre(e.target.value)
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    className: "sd-input",
+    style: {
+      flex: 1
+    },
+    placeholder: "Precio",
+    value: precio,
+    onChange: e => setPrecio(e.target.value)
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-primary",
+    onClick: agregar
+  }, "Agregar")), products.length === 0 ? /*#__PURE__*/React.createElement(EmptyState, {
+    text: "Aún no hay productos cargados."
+  }) : /*#__PURE__*/React.createElement("table", {
+    className: "sd-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Producto"), /*#__PURE__*/React.createElement("th", null, "Precio"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, products.map(p => /*#__PURE__*/React.createElement("tr", {
+    key: p.name
+  }, /*#__PURE__*/React.createElement("td", null, p.name), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    className: "sd-input",
+    style: {
+      width: 110
+    },
+    value: p.price,
+    onChange: e => actualizarPrecio(p.name, e.target.value)
+  })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-ghost",
+    style: {
+      padding: "4px 9px",
+      fontSize: 12
+    },
+    onClick: () => eliminar(p.name)
+  }, "Quitar")))))));
 }
-
-function Sync({ entries, products, onConfigured }) {
+function Sync({
+  entries,
+  products,
+  onConfigured
+}) {
   const [url, setUrl] = useState(getApiUrl());
   const [estado, setEstado] = useState("");
   const conectado = !!getApiUrl();
-
   const csv = useMemo(() => {
-    const header = ["Fecha","Nombre","Curso / Rol","Producto","Cantidad","Valor","Total compra","Abono","Saldo movimiento","Estado","Observación"];
-    const rows = entries.map((e) => [e.fecha, e.nombre, e.curso, e.producto, e.cantidad, e.valor, e.totalCompra, e.abono, e.saldo, e.estado, e.observacion || ""]);
-    return [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const header = ["Fecha", "Nombre", "Curso / Rol", "Producto", "Cantidad", "Valor", "Total compra", "Abono", "Saldo movimiento", "Estado", "Observación"];
+    const rows = entries.map(e => [e.fecha, e.nombre, e.curso, e.producto, e.cantidad, e.valor, e.totalCompra, e.abono, e.saldo, e.estado, e.observacion || ""]);
+    return [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
   }, [entries]);
-
   const descargar = () => {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;"
+    });
     const dlUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = dlUrl; a.download = "RegistroDeudas.csv"; a.click();
+    a.href = dlUrl;
+    a.download = "RegistroDeudas.csv";
+    a.click();
     URL.revokeObjectURL(dlUrl);
   };
-
   const probarYGuardar = async () => {
     if (!url.trim()) return;
     setEstado("Probando conexión…");
@@ -616,7 +1138,6 @@ function Sync({ entries, products, onConfigured }) {
       setEstado("No se pudo conectar — revisa que la URL termine en /exec y que el acceso esté en \"Cualquier usuario\".");
     }
   };
-
   const appsScript = `function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return ContentService.createTextOutput(JSON.stringify({
@@ -658,46 +1179,96 @@ function leerProductos(ss, nombre) {
   const filas = sh.getDataRange().getValues().slice(1).filter(r => r.some(c => c !== ""));
   return filas.map(r => ({ name: r[0], price: r[1] }));
 }`;
-
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div className="sd-card" style={{ padding: 20, borderLeft: `4px solid ${conectado ? "var(--sage)" : "var(--ochre)"}` }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>
-          {conectado ? "Sincronización activa ✓" : "Conectar con Google Sheets"}
-        </div>
-        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 12, lineHeight: 1.5 }}>
-          {conectado
-            ? "Cada registro, abono o producto que se guarde acá se envía solo a tu Google Sheet, y cada " + (POLL_MS/1000) + " segundos revisa si hay cambios hechos desde otro dispositivo. No necesitas hacer nada más."
-            : "Para que la app se sincronice sola entre todos los dispositivos, conéctala una vez a tu Google Sheet con un puente gratuito (Apps Script):"}
-        </div>
-        {!conectado && (
-          <ol style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.8, paddingLeft: 18, marginBottom: 14 }}>
-            <li>Abre tu Google Sheet → Extensiones → Apps Script.</li>
-            <li>Borra el contenido y pega el código de abajo → Guardar.</li>
-            <li>Implementar → Nueva implementación → tipo "Aplicación web" → Ejecutar como "Yo" → acceso "Cualquier usuario" → Implementar.</li>
-            <li>Copia la URL que termina en <code>/exec</code> y pégala abajo.</li>
-          </ol>
-        )}
-        {!conectado && (
-          <pre style={{ background: "var(--paper)", padding: 12, borderRadius: 8, fontSize: 11.5, overflowX: "auto", marginBottom: 14 }}>{appsScript}</pre>
-        )}
-        <div style={{ display: "flex", gap: 8 }}>
-          <input className="sd-input" style={{ flex: 1 }} placeholder="Pega aquí la URL que termina en /exec" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <button className="sd-btn sd-btn-primary" onClick={probarYGuardar}>{conectado ? "Actualizar URL" : "Conectar"}</button>
-        </div>
-        {estado && <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 8 }}>{estado}</div>}
-      </div>
-
-      <div className="sd-card" style={{ padding: 20 }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--sage-dark)" }}>Exportar</div>
-        <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 14 }}>Descarga el registro completo en formato compatible con tu planilla (por si lo necesitas aparte).</div>
-        <button className="sd-btn sd-btn-primary" onClick={descargar}>Descargar CSV</button>
-      </div>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: 20,
+      borderLeft: `4px solid ${conectado ? "var(--sage)" : "var(--ochre)"}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      fontWeight: 600,
+      marginBottom: 6,
+      color: "var(--sage-dark)"
+    }
+  }, conectado ? "Sincronización activa ✓" : "Conectar con Google Sheets"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "var(--ink-soft)",
+      marginBottom: 12,
+      lineHeight: 1.5
+    }
+  }, conectado ? "Cada registro, abono o producto que se guarde acá se envía solo a tu Google Sheet, y cada " + POLL_MS / 1000 + " segundos revisa si hay cambios hechos desde otro dispositivo. No necesitas hacer nada más." : "Para que la app se sincronice sola entre todos los dispositivos, conéctala una vez a tu Google Sheet con un puente gratuito (Apps Script):"), !conectado && /*#__PURE__*/React.createElement("ol", {
+    style: {
+      fontSize: 13,
+      color: "var(--ink)",
+      lineHeight: 1.8,
+      paddingLeft: 18,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("li", null, "Abre tu Google Sheet → Extensiones → Apps Script."), /*#__PURE__*/React.createElement("li", null, "Borra el contenido y pega el código de abajo → Guardar."), /*#__PURE__*/React.createElement("li", null, "Implementar → Nueva implementación → tipo \"Aplicación web\" → Ejecutar como \"Yo\" → acceso \"Cualquier usuario\" → Implementar."), /*#__PURE__*/React.createElement("li", null, "Copia la URL que termina en ", /*#__PURE__*/React.createElement("code", null, "/exec"), " y pégala abajo.")), !conectado && /*#__PURE__*/React.createElement("pre", {
+    style: {
+      background: "var(--paper)",
+      padding: 12,
+      borderRadius: 8,
+      fontSize: 11.5,
+      overflowX: "auto",
+      marginBottom: 14
+    }
+  }, appsScript), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "sd-input",
+    style: {
+      flex: 1
+    },
+    placeholder: "Pega aquí la URL que termina en /exec",
+    value: url,
+    onChange: e => setUrl(e.target.value)
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-primary",
+    onClick: probarYGuardar
+  }, conectado ? "Actualizar URL" : "Conectar")), estado && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--ink-soft)",
+      marginTop: 8
+    }
+  }, estado)), /*#__PURE__*/React.createElement("div", {
+    className: "sd-card",
+    style: {
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 16,
+      fontWeight: 600,
+      marginBottom: 6,
+      color: "var(--sage-dark)"
+    }
+  }, "Exportar"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "var(--ink-soft)",
+      marginBottom: 14
+    }
+  }, "Descarga el registro completo en formato compatible con tu planilla (por si lo necesitas aparte)."), /*#__PURE__*/React.createElement("button", {
+    className: "sd-btn sd-btn-primary",
+    onClick: descargar
+  }, "Descargar CSV")));
 }
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
 </script>
 </body>
 </html>
